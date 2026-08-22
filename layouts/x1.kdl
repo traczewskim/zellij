@@ -1,0 +1,82 @@
+// x1 — persistent Claude Code workspace
+// Seed layout. Read ONLY when the session is created from nothing; after that
+// Zellij serializes the live session every 60s and resurrection replays that.
+// To pick up an edit here:  zellij delete-session -f x1 && zj
+
+layout {
+    pane_template name="vtabs" borderless=true {
+        plugin location="file:__HOME__/.config/zellij/plugins/zellij-vertical-tabs.wasm" {
+            // {title} = focused pane's terminal title. For a ccs slot that title
+            // is owned by ccs-state, which rewrites it via `rename-pane` on the
+            // SessionStart/UserPromptSubmit/Stop hooks -> the 🟢/⚪ indicator.
+            // Claude's own title glyph cannot be used: it is present when idle
+            // too, and animates at ~10Hz. See docs/DESIGN-NOTES.md, F4.
+            format          "#[fg=muted]{index} {=17:title}"
+            format_active   "#[bg=236,fill]#[fg=accent,bold]{index} {=17:title}"
+            indicator_active     ""
+            indicator_fullscreen "Z"
+            indicator_sync       "S"
+            max_name_length 17
+            border          "#[fg=dim]│"
+            start_index     1
+        }
+    }
+
+    pane_template name="statusbar" borderless=true {
+        plugin location="file:__HOME__/.config/zellij/plugins/zjstatus.wasm" {
+            format_left   "{mode}#[fg=#89B4FA,bold] {session}"
+            format_center ""
+            format_right  "{command_git_branch}#[fg=#6C7086] {datetime}"
+            format_space  ""
+            border_enabled "false"
+            hide_frame_for_single_pane "false"
+
+            mode_normal        "#[bg=#A6E3A1,fg=#181825,bold] NORMAL "
+            mode_locked        "#[bg=#6C7086,fg=#181825,bold] LOCKED "
+            mode_pane          "#[bg=#89B4FA,fg=#181825,bold] PANE "
+            mode_tab           "#[bg=#89B4FA,fg=#181825,bold] TAB "
+            mode_scroll        "#[bg=#F9E2AF,fg=#181825,bold] SCROLL "
+            mode_resize        "#[bg=#F9E2AF,fg=#181825,bold] RESIZE "
+            mode_search        "#[bg=#F9E2AF,fg=#181825,bold] SEARCH "
+            mode_session       "#[bg=#CBA6F7,fg=#181825,bold] SESSION "
+            mode_move          "#[bg=#CBA6F7,fg=#181825,bold] MOVE "
+            mode_default_to_mode "normal"
+
+            command_git_branch_command    "git rev-parse --abbrev-ref HEAD"
+            command_git_branch_format     "#[fg=#F9E2AF] {stdout}"
+            command_git_branch_interval   "10"
+            command_git_branch_rendermode "static"
+
+            datetime           "#[fg=#6C7086]{format}"
+            datetime_format    "%Y-%m-%d %H:%M"
+            datetime_timezone  "Europe/Warsaw"
+        }
+    }
+
+    // Every Claude pane goes through ccs, by ABSOLUTE path, so pane startup
+    // never depends on the PATH the Zellij server happened to inherit.
+    pane_template name="slot" {
+        command "__HOME__/.local/bin/ccs"
+    }
+
+    // NOTE: tabs deliberately carry no name= — see the notes file.
+    tab cwd="__HOME__/code" focus=true {
+        pane split_direction="vertical" {
+            vtabs size=22
+            slot {
+                args "main"
+            }
+        }
+        statusbar size=1
+    }
+
+    // Hand-made tabs (Ctrl+t n) inherit this, and it is serialized too,
+    // so they keep the sidebar and status bar across a resurrection.
+    new_tab_template {
+        pane split_direction="vertical" {
+            vtabs size=22
+            pane
+        }
+        statusbar size=1
+    }
+}

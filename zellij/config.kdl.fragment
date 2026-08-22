@@ -1,0 +1,7 @@
+// Appended to ~/.config/zellij/config.kdl
+// Session persistence. serialization_interval is a loss window: a session that
+// dies younger than this was never written and vanishes entirely rather than
+// becoming resurrectable.
+serialization_interval 60
+serialize_pane_viewport true
+scrollback_lines_to_serialize 10000

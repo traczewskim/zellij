@@ -1,0 +1,9 @@
+# slot <TAB> conversation-uuid
+#
+# Written automatically by `ccs` on the first launch of each slot, and read by
+# `ccs-state` to map a Claude session_id back to its slot name.
+#
+# You only need to edit this by hand to ADOPT a conversation that already
+# exists under a different uuid. Slots absent from the file derive a stable
+# uuid from the slot name.
+main	00000000-1111-4222-a333-444444444444

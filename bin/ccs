@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# ccs <slot> [claude args...]
+#
+# Pins one Claude Code conversation per slot name, so a Zellij pane that is
+# serialized and later resurrected comes back to the SAME conversation.
+#
+# Zellij serializes the RESOLVED command (this wrapper execs, so it drops out
+# of the picture after first launch). That makes the exec'd form load-bearing:
+# `claude --session-id` is CREATE-ONLY and dies with "Session ID ... is already
+# in use" the second time it runs. So a brand-new slot is materialized once
+# here, and we always exec the idempotent `--resume` form.
+set -euo pipefail
+slot="${1:?usage: ccs <slot> [claude args...]}"; shift || true
+
+uuid=$(awk -v s="$slot" '$1 == s { print $2; exit }' "$HOME/.config/claude-slots" 2>/dev/null || true)
+
+if [ -z "$uuid" ]; then
+    h=$(printf '%s' "$slot" | sha1sum); h=${h:0:32}
+    uuid="${h:0:8}-${h:8:4}-4${h:13:3}-a${h:17:3}-${h:20:12}"
+fi
+
+# Register the slot so the state hooks (ccs-state) can map a Claude
+# session_id back to its slot name. Harmless to re-run.
+if ! awk -v s="$slot" '$1 == s { found=1 } END { exit !found }' \
+        "$HOME/.config/claude-slots" 2>/dev/null; then
+    printf '%s\t%s\n' "$slot" "$uuid" >> "$HOME/.config/claude-slots"
+fi
+
+# --resume resolves a uuid regardless of cwd, so search all projects.
+find_conv() { find "$HOME/.claude/projects" -maxdepth 2 -name "$uuid.jsonl" -print -quit 2>/dev/null || true; }
+
+existing=$(find_conv)
+if [ -z "$existing" ]; then
+    # First launch of this slot: create the conversation with one headless
+    # turn, so that from here on the serializable command line is --resume.
+    claude --session-id "$uuid" -p "Slot \"$slot\" initialised." \
+        >/dev/null 2>&1 </dev/null || true
+    existing=$(find_conv)
+fi
+
+if [ -n "$existing" ]; then
+    exec claude --resume "$uuid" --name "$slot" "$@"
+fi
+
+# Materialisation failed (offline, etc). Fall back to create; this pane will
+# need `ccs <slot>` re-run by hand if it is resurrected before it is used.
+exec claude --session-id "$uuid" --name "$slot" "$@"

@@ -1,0 +1,6 @@
+# Appended to ~/.bashrc
+# One command for every state:
+#   live    -> attach to the running session
+#   EXITED  -> resurrect it; -f force-runs panes past start_suspended
+#   absent  -> build fresh from ~/.config/zellij/layouts/x1.kdl
+alias zj='zellij attach -f x1 || zellij -s x1 -n x1'

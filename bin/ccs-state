@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# ccs-state <working|attn|idle>
+#
+# Claude Code hook helper. Retitles THIS pane in the Zellij vertical tab bar,
+# so the sidebar shows a real running/idle indicator instead of Claude's own
+# terminal title (whose glyph is present in both states and animates at ~10Hz,
+# so the sidebar can only ever sample it arbitrarily).
+#
+# Renames by pane id, so it never steals focus from another tab. An explicit
+# pane name permanently outranks the OSC title, which is what makes it stable.
+# No-ops outside Zellij, and for any Claude session that is not a ccs slot.
+set -uo pipefail
+state="${1:-idle}"
+
+[ -n "${ZELLIJ_PANE_ID:-}" ] || exit 0
+
+payload=$(cat 2>/dev/null || true)
+sid=$(printf '%s' "$payload" \
+      | sed -n 's/.*"session_id"[[:space:]]*:[[:space:]]*"\([0-9a-fA-F-]\{36\}\)".*/\1/p' \
+      | head -1)
+[ -n "$sid" ] || exit 0
+
+slot=$(awk -v u="$sid" '$2 == u { print $1; exit }' "$HOME/.config/claude-slots" 2>/dev/null || true)
+[ -n "$slot" ] || exit 0
+
+case "$state" in
+    working) name="🟢 $slot" ;;
+    attn)    name="🟡 $slot" ;;
+    *)       name="⚪ $slot" ;;
+esac
+
+zellij action rename-pane -p "$ZELLIJ_PANE_ID" "$name" >/dev/null 2>&1 || true
+exit 0

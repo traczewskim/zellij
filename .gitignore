@@ -1,0 +1,4 @@
+# Real slot map: maps slot names (which tend to encode what you are working on)
+# to conversation uuids. Keep it local; commit claude-slots.example instead.
+claude-slots
+plugins/*.wasm

@@ -1,0 +1,9 @@
+"__HOME__/.config/zellij/plugins/zjstatus.wasm" {
+    RunCommands
+    ReadApplicationState
+    ChangeApplicationState
+}
+"__HOME__/.config/zellij/plugins/zellij-vertical-tabs.wasm" {
+    ChangeApplicationState
+    ReadApplicationState
+}
