@@ -255,9 +255,45 @@ Zellij server. Two changes made the hook affordable:
 | Unchanged (the common case) | 176ms | **17ms** |
 | Name or state actually changed | 176ms | 138ms |
 
-**Still not fixed:** a pane sitting fully idle fires no hooks, so a rename
-there is invisible until the next message. Only polling could close that,
-which is not worth a background timer.
+**Still not fixed here:** a pane sitting fully idle fires no hooks, so a
+rename there is invisible until the next message. Closed in F18 by a
+watcher.
+
+### F18. Idle panes need a watcher, because hooks are not events
+
+F17 left one gap open: hooks fire only while a session is *doing* something.
+A pane renamed with `/rename` and then left alone fires nothing at all, so
+its row kept a stale label until the next message landed in it. Three panes
+were observed stale at once this way.
+
+No hook event covers it — `/rename` is a local slash command, and there is
+no "session renamed" hook to subscribe to. The only fix is something that
+runs when nothing else does.
+
+`bin/ccs-watch` is that: a single-instance poller, started by `ccs-state` on
+a pane's first hook fire and held to one copy with `flock`. `inotifywait` was
+not available on this machine, so it polls (2s, `X1_WATCH_INTERVAL`), gated
+on a nanosecond-resolution stat of `~/.claude/sessions/*.json` so an
+unchanged cycle does almost no work. It exits on its own when the Zellij
+socket directory goes away.
+
+The cache line became `<session-id>\t<rendered name>`; the session id is
+what lets the watcher map a pane back to a session with no hook payload.
+
+**It repaints the label only, never the state.** The glyph is taken from
+whatever the hooks last wrote (`${cur%% *}`) — a poller has no way to know
+whether an agent is generating, and inventing that would make the indicator
+lie in exactly the way F4 and F14 were about.
+
+Two bugs found while building it, both worth remembering:
+
+- `exec 9>"$lock" 2>/dev/null` redirects stderr for the **rest of the
+  script**, not just that line. It silently swallowed all `bash -x` output
+  and made the watcher look like it was dying at startup.
+- `read` returns non-zero at EOF when a file has no trailing newline, which
+  is how `printf '%s\t%s'` writes the cache. `read ... || continue` skipped
+  every pane even though both fields had been assigned correctly. Check the
+  variables, not `read`'s exit status.
 
 ### Deferred: the plugin's activity rows
 

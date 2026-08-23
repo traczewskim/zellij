@@ -60,8 +60,21 @@ esac
 cache="${XDG_CACHE_HOME:-$HOME/.cache}/x1-ccs-state"
 mkdir -p "$cache" 2>/dev/null || true
 last="$cache/$ZELLIJ_PANE_ID"
-[ "$(cat "$last" 2>/dev/null || true)" = "$name" ] && exit 0
+
+# The cache line is "<session-id>\t<rendered name>". The session id is what
+# lets ccs-watch repaint this pane later, while no hook is firing (F18).
+prev=""
+[ -r "$last" ] && IFS=$'\t' read -r _ prev < "$last" 2>/dev/null || true
+
+# No cache entry means this is the pane's first fire, i.e. SessionStart.
+# Cheapest possible moment to make sure the watcher is up: a file test, and
+# ccs-watch itself no-ops via flock when one is already running.
+if [ ! -e "$last" ] && [ -x "$HOME/.local/bin/ccs-watch" ]; then
+    setsid "$HOME/.local/bin/ccs-watch" >/dev/null 2>&1 < /dev/null &
+fi
+
+[ "$prev" = "$name" ] && exit 0
 
 zellij action rename-pane -p "$ZELLIJ_PANE_ID" "$name" >/dev/null 2>&1 || true
-printf '%s' "$name" > "$last" 2>/dev/null || true
+printf '%s\t%s' "$sid" "$name" > "$last" 2>/dev/null || true
 exit 0

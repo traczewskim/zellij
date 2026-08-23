@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# ccs-watch — repaint panes renamed while nothing is running.
+#
+# Claude Code hooks only fire while a session is doing something. A pane
+# renamed with /rename and then left alone fires nothing at all, so its
+# sidebar row keeps a stale label until the next message lands in it
+# (F17). This watches for that case and repaints it.
+#
+# Single instance, enforced with flock. ccs-state starts it on a pane's
+# first hook fire; starting it again is a no-op. No-ops entirely outside
+# Zellij, and exits on its own when the Zellij server goes away.
+set -uo pipefail
+
+cache="${XDG_CACHE_HOME:-$HOME/.cache}/x1-ccs-state"
+sessions="$HOME/.claude/sessions"
+interval="${X1_WATCH_INTERVAL:-2}"
+sock="${XDG_RUNTIME_DIR:-/run/user/$UID}/zellij"
+
+mkdir -p "$cache" 2>/dev/null || exit 0
+# Never delete this lock file, and never trap-remove it on exit: unlinking a
+# file another process holds a lock on lets the next start create a fresh
+# inode and lock that instead, so two watchers run. Closing the fd on exit
+# releases the lock on its own, which is all that is needed.
+exec 9>"$cache/.lock" || exit 0   # no 2>/dev/null here — it would be permanent
+flock -n 9 || exit 0              # another watcher owns it; nothing to do
+
+while :; do
+    sleep "$interval"
+
+    # Zellij gone -> nothing to repaint, and no reason to keep running.
+    [ -d "$sock" ] && [ -n "$(ls -A "$sock" 2>/dev/null)" ] || exit 0
+
+    # Cheap gate: one stat of the session files. /rename rewrites a file in
+    # place, so compare sizes+mtimes rather than the directory's own mtime,
+    # which does not change on in-place writes.
+    fp=$(ls -l --time-style=+%s.%N "$sessions"/*.json 2>/dev/null | awk '{print $5,$6,$9}')
+    [ "$fp" = "${fp_last:-}" ] && continue
+    fp_last="$fp"
+
+    for cf in "$cache"/[0-9]*; do
+        [ -f "$cf" ] || continue
+        # No `|| continue` on read: the cache line has no trailing newline,
+        # so read exits non-zero at EOF even though it assigned both fields.
+        sid=""; cur=""
+        IFS=$'\t' read -r sid cur < "$cf"
+        # Pre-F18 entries hold just the label, with no session id, so there
+        # is no way to resolve them here. Drop them; ccs-state rewrites the
+        # entry in the new format on that pane's next hook fire.
+        [ -n "$cur" ] || { rm -f "$cf" 2>/dev/null; continue; }
+        [ -n "$sid" ] || continue
+
+        f=$(grep -lF "\"sessionId\":\"$sid\"" "$sessions"/*.json 2>/dev/null \
+            | xargs -r ls -t 2>/dev/null | head -1)
+        [ -n "$f" ] || continue
+        label=$(sed -n 's/.*"name":"\([^"]*\)".*/\1/p' "$f" 2>/dev/null | head -1)
+        [ -n "$label" ] || continue
+
+        # Keep whatever state glyph the hooks last wrote; only the label is
+        # ours to correct. Renaming must never invent a run state.
+        new="${cur%% *} $label"
+        [ "$new" = "$cur" ] && continue
+
+        zellij action rename-pane -p "${cf##*/}" "$new" >/dev/null 2>&1 || true
+        printf '%s\t%s' "$sid" "$new" > "$cf" 2>/dev/null || true
+    done
+done

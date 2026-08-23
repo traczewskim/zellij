@@ -45,7 +45,7 @@ Three goals, in order of how much design effort they cost:
 Idempotent, and backs up every file it touches as `<file>.bak-<date>` before
 changing it. It:
 
-- installs `ccs` and `ccs-state` to `~/.local/bin/`
+- installs `ccs`, `ccs-state` and `ccs-watch` to `~/.local/bin/`
 - installs `layouts/x1.kdl` to `~/.config/zellij/layouts/`
 - fetches the two plugin `.wasm` files (see Plugins, below) into `~/.config/zellij/plugins/`
 - installs `zellij/permissions.kdl` to `~/.cache/zellij/permissions.kdl`
@@ -62,6 +62,7 @@ Open a new shell (to pick up the `zj` alias) and run `zj`.
 | `install.sh` | — | Idempotent installer, see above |
 | `bin/ccs` | `~/.local/bin/ccs` | Slot wrapper — pins one Claude conversation per slot name |
 | `bin/ccs-state` | `~/.local/bin/ccs-state` | Hook helper — paints the running/idle indicator |
+| `bin/ccs-watch` | `~/.local/bin/ccs-watch` | Watcher — repaints panes renamed while idle |
 | `layouts/x1.kdl` | `~/.config/zellij/layouts/x1.kdl` | Seed layout, read only on first creation |
 | `plugins/fetch-plugins.sh` | — | Downloads the two prebuilt plugin `.wasm` files |
 | `zellij/config.kdl.fragment` | appended to `~/.config/zellij/config.kdl` | Serialization settings |
@@ -167,9 +168,10 @@ all three read the same pane name.
 `zellij-vertical-tabs`'s format strings only expose `{count}`, `{index}`,
 `{indicators}`, and `{name}` — and `{name}` resolves to the *focused pane*,
 not the tab. `/rename` is the only user-facing control over the label, and
-it lags by one message: it fires no hook, so the row only repaints on the
-next `UserPromptSubmit` or `Stop`. Sending any message in that pane corrects
-it immediately.
+it fires no hook. `ccs-state` repaints during a turn (`PostToolUse`), and
+`ccs-watch` — a single-instance poller started automatically — catches a
+pane renamed while it sits idle, within about two seconds. It corrects the
+label only; the state glyph always comes from the hooks.
 
 **Split panes collapse to one row.** The sidebar shows one row per *tab*,
 reflecting whichever pane is focused. A tab with two Claude panes — one
