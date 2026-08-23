@@ -93,7 +93,8 @@ installer — see Security, below.
 
 **The one rule: start Claude with `ccs <slot>`, never bare `claude`.** A bare
 `claude` pane serializes with no session id and resurrects as an empty
-conversation.
+conversation. The working/idle indicator does **not** depend on this — it
+works for every Claude pane, `ccs` or not (see F15).
 
 `x1.kdl` is a **seed** — read only when the session is created from nothing.
 After that, Zellij serializes the live session every 60s and resurrection

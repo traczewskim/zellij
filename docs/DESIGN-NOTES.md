@@ -118,11 +118,10 @@ to `ccs-state`, which renames the firing pane by id:
 | `UserPromptSubmit` | working |
 | `Stop` | idle |
 
-`ccs-state` maps the `session_id` it receives on stdin back to a slot name
-via `~/.config/claude-slots` (the same file `ccs` populates), and no-ops if
-there's no Zellij pane id in the environment, or no matching slot — so the
-hooks are safe to leave installed globally, including for Claude sessions
-that have nothing to do with this workspace.
+`ccs-state` labels the row with a registered slot name when the `session_id`
+maps to one via `~/.config/claude-slots`, and otherwise with the pane's
+directory (F15). It no-ops only when there is no Zellij pane id in the
+environment, so the hooks are safe to leave installed globally.
 
 **Verified timeline**, from a real session where a prompt was sent at t=45s
 and the agent backgrounded a long-running command, went idle, then resumed
@@ -148,6 +147,60 @@ not only when input is genuinely required. Wiring a third "needs attention"
 state to it made that state the *resting* state in testing — nearly every
 turn ended by tripping it — so it carried no signal. Only `SessionStart`,
 `UserPromptSubmit`, and `Stop` are hooked.
+
+### F14. An unpinned pane fails *silently*, in two different ways
+
+The indicator has no way to report "this pane isn't managed", so a bare
+`claude` pane degrades into something that still looks plausible in the
+sidebar. Observed live, with three panes open and only one of them started
+through `ccs`:
+
+| Tab | Process | Row shown | Why |
+|---|---|---|---|
+| 1 | `claude --resume … --name main` | `⚪ main` | correct |
+| 2 | `claude` | `⚪ gamma` | **stale** — frozen leftover name |
+| 3 | `claude` | `✳ Claude Code` | raw OSC title, never renamed |
+
+Tab 3 is the benign case: no `--name`, so the title falls back to Claude's
+default, and the `session_id` is absent from `~/.config/claude-slots`, so
+`ccs-state` exits at the slot lookup and never calls `rename-pane`.
+
+Tab 2 is the dangerous one. It had been a `ccs` slot earlier, was renamed
+once, and was later relaunched bare. By F8 a rename permanently outranks the
+OSC title — so the row kept reading `⚪ gamma` with nothing behind it
+updating that value. A frozen row is pixel-identical to a genuinely idle
+one. The indicator was not wrong so much as *unfalsifiable*.
+
+Both cases are also the persistence bug, not just cosmetics: neither pane
+carries a session id, so both resurrect empty.
+
+**Decision:** the indicator must not depend on `ccs` at all. See F15.
+
+### F15. The indicator was wrongly coupled to `claude-slots`
+
+`ccs-state` looked the `session_id` up in `~/.config/claude-slots` and
+exited when there was no match, so the whole indicator was inert for any
+pane not launched through `ccs`. Observed with four tabs open, none
+registered: every row showed Claude's own summary title, and the tab that
+was actively working showed the same `✳` as the three idle ones — F4,
+reproduced end to end.
+
+That coupling was a design error. `ccs` exists for *persistence*; gating the
+*indicator* on it meant the common case (a hand-made tab) silently got
+nothing, which reads as "the indicator is broken" rather than "this pane is
+unmanaged".
+
+`ccs-state` now falls back to the `cwd` from the hook payload
+(`basename`), so every Claude pane in Zellij gets a `🟢`/`⚪` row. A
+registered slot name still wins when there is one.
+
+**Rejected: a shell guard on bare `claude`.** A `claude()` bash function
+that prompted before starting an unpinned session was built and worked
+(scripts bypass it, since bash does not export functions to scripts), but it
+put a confirmation in front of the single most common command in the
+workspace to defend against a resurrection edge case. Removed. The
+indicator fix above addresses the visible half of the problem; the
+persistence half stays a convention, not an interruption.
 
 ### Deferred: the plugin's activity rows
 

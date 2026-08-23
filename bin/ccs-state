@@ -20,8 +20,17 @@ sid=$(printf '%s' "$payload" \
       | head -1)
 [ -n "$sid" ] || exit 0
 
+# Label: a registered slot name if there is one, else the pane's directory.
+# NOT requiring a slot is deliberate — the indicator must work for every
+# Claude pane, not only ccs-managed ones. Tying it to claude-slots made it
+# silently inert for hand-made tabs (see F14/F15).
 slot=$(awk -v u="$sid" '$2 == u { print $1; exit }' "$HOME/.config/claude-slots" 2>/dev/null || true)
-[ -n "$slot" ] || exit 0
+if [ -z "$slot" ]; then
+    cwd=$(printf '%s' "$payload" \
+          | sed -n 's/.*"cwd"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+    slot=$(basename "${cwd:-$PWD}")
+    [ -n "$slot" ] && [ "$slot" != "/" ] || slot="claude"
+fi
 
 case "$state" in
     working) name="🟢 $slot" ;;
