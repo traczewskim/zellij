@@ -25,6 +25,30 @@ sid=$(printf '%s' "$payload" \
 # Claude pane, not only ccs-managed ones. Tying it to claude-slots made it
 # silently inert for hand-made tabs (see F14/F15).
 slot=$(awk -v u="$sid" '$2 == u { print $1; exit }' "$HOME/.config/claude-slots" 2>/dev/null || true)
+# Then Claude's own session name — what `/rename` and `ccs`'s --name set.
+# Zellij tab names cannot be used: the sidebar plugin's only placeholders are
+# {count} {index} {indicators} {name}, and {name} is the PANE, so `Ctrl+t R`
+# never reaches this row. /rename is the one control surface users have.
+if [ -z "$slot" ]; then
+    slot=$(python3 - "$sid" <<'PY' 2>/dev/null || true
+import glob, json, os, sys
+best = ("", 0)
+for f in glob.glob(os.path.expanduser("~/.claude/sessions/*.json")):
+    try:
+        d = json.load(open(f))
+    except Exception:
+        continue
+    if d.get("sessionId") == sys.argv[1] and d.get("name"):
+        m = os.path.getmtime(f)
+        if m > best[1]:
+            best = (d["name"], m)
+print(best[0])
+PY
+)
+fi
+
+# Last resort: the pane's directory. Drifts as the cwd moves, so it is only
+# a placeholder until the session is named.
 if [ -z "$slot" ]; then
     cwd=$(printf '%s' "$payload" \
           | sed -n 's/.*"cwd"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)

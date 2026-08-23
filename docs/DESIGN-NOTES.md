@@ -202,6 +202,26 @@ workspace to defend against a resurrection edge case. Removed. The
 indicator fix above addresses the visible half of the problem; the
 persistence half stays a convention, not an interruption.
 
+### F16. `/rename` drives the label, with a one-message lag
+
+Zellij tab names are unreachable from this sidebar (F15), so the label has
+to come from the pane name, and the pane name is set from Claude's own
+session name — what `/rename` writes, and what `ccs` passes as `--name`.
+It lives in `~/.claude/sessions/<pid>.json` as `name`, keyed by `sessionId`,
+which is how `ccs-state` finds it.
+
+**The lag:** `/rename` is a local slash command and fires no hook, so the
+row does not repaint until the next `UserPromptSubmit` or `Stop`. Verified:
+two panes renamed to `tab1`/`tab2` still displayed their old names, while
+the session files already held the new ones. Sending any message in the
+pane updates it immediately. There is no rename hook event to subscribe to,
+so this is accepted rather than fixed.
+
+**Claude auto-names sessions.** When several sessions share a directory,
+Claude Code generates `code`, `code-76`, `code-ea` and so on. So the
+cwd-basename branch in `ccs-state` is nearly dead code — a name is almost
+always already present. It is kept only as a safety net.
+
 ### Deferred: the plugin's activity rows
 
 `zellij-vertical-tabs` master, as of the "activity-sidebar" PR (#3, merged
