@@ -5,8 +5,8 @@ every tab resumes **its own Claude Code conversation** after a detach, a
 `Ctrl+q`, or a full reboot — plus a per-tab running/idle indicator in the
 sidebar so you can tell which tabs are working without switching to them.
 
-Built and verified on Zellij **0.44.1** (snap), **WSL2**, bash, Claude Code
-**v2.1.239**. Nothing here has been tested on other platforms or versions.
+Built and verified on Zellij **0.44.1** (snap), **Linux**, bash, Claude Code
+**v2.1.241**. Nothing here has been tested on other platforms or versions.
 
 ## The problem this solves
 
@@ -33,7 +33,7 @@ Three goals, in order of how much design effort they cost:
 ## Requirements
 
 - Zellij 0.44.1+ (KDL layout syntax, `permissions.kdl`, `serialize_pane_viewport`)
-- Claude Code (tested against v2.1.239), with `--session-id`, `--resume`, `--name`, and hooks support
+- Claude Code (tested against v2.1.241), with `--session-id`, `--resume`, `--name`, and hooks support
 - bash, `curl`, `awk`, `sed`, `sha1sum`, `python3` (install script only)
 
 ## Install
@@ -118,8 +118,12 @@ than Claude's own terminal title (which cannot express it — see
 
 | Sidebar | Meaning |
 |---|---|
-| `🟢 <slot>` | agent is generating |
-| `⚪ <slot>` | idle, waiting for you |
+| `🟢 <label>` | agent is generating |
+| `⚪ <label>` | idle, waiting for you |
+
+`<label>` is, in order of priority: a registered slot name, Claude's own
+session name (what `/rename` writes, and what `ccs` passes as `--name`), or
+the pane's cwd basename as a last resort.
 
 **Before** — the sidebar showing Claude's own terminal title. All three tabs
 read `✳`, including tab 2, which is mid-generation at that instant. The
@@ -147,12 +151,35 @@ which one is busy.
 It renames the pane with `zellij action rename-pane -p "$ZELLIJ_PANE_ID"` —
 targeting the pane **by id**, so it never steals focus from another tab and
 works for background tabs. It maps the Claude `session_id` it receives on
-stdin back to a slot name via `~/.config/claude-slots` (the same file `ccs`
-appends to). It no-ops outside Zellij, and for any Claude session that isn't
-a `ccs` slot — so the hooks are safe to have installed globally, even for
-Claude sessions started outside this workspace.
+stdin to a slot name via `~/.config/claude-slots` (the same file `ccs`
+appends to); failing that, to Claude's own session name, read from
+`~/.claude/sessions/<pid>.json`; failing that, to the cwd basename. It
+no-ops only when there's no Zellij pane id in the environment — so the
+hooks are safe to have installed globally, and the indicator works for
+**every** Claude pane in a Zellij session, not only ones started with `ccs`.
 
-**Tradeoff:** the pane title is now always `<state> <slot>`. Claude's own
+**One rename touches three surfaces at once:** the sidebar row, the pane's
+own frame header, and the terminal window title all update together, since
+all three read the same pane name.
+
+**`Ctrl+t R` (Zellij's own rename-tab) never changes the sidebar.**
+`zellij-vertical-tabs`'s format strings only expose `{count}`, `{index}`,
+`{indicators}`, and `{name}` — and `{name}` resolves to the *focused pane*,
+not the tab. `/rename` is the only user-facing control over the label, and
+it lags by one message: it fires no hook, so the row only repaints on the
+next `UserPromptSubmit` or `Stop`. Sending any message in that pane corrects
+it immediately.
+
+**Split panes collapse to one row.** The sidebar shows one row per *tab*,
+reflecting whichever pane is focused. A tab with two Claude panes — one
+working, one idle — shows only the focused pane's state; each pane's own
+frame header still shows its own true state.
+
+**Claude auto-names sessions that share a directory** (`code`, `code-76`,
+`code-ea`, …), which is why the cwd-basename fallback above is rarely
+reached in practice — a name is almost always already present.
+
+**Tradeoff:** the pane title is now always `<state> <label>`. Claude's own
 title — a live summary of the current task, e.g. `✳ What's going on` — is no
 longer shown. `zellij action undo-rename-pane -p <id>` restores it for one
 pane; removing the hooks restores it everywhere.

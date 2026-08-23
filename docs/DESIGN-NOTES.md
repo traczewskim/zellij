@@ -2,7 +2,7 @@
 
 Empirical findings behind the `x1` workspace, and why each design decision
 went the way it did. Everything below was tested on this machine — Zellij
-0.44.1 (snap), WSL2, bash, Claude Code v2.1.239 — not assumed from the docs.
+0.44.1 (snap), Linux, bash, Claude Code v2.1.241 — not assumed from the docs.
 See [README.md](../README.md) for usage; this file is the "why".
 
 ## The central trap: what actually gets serialized
@@ -118,10 +118,11 @@ to `ccs-state`, which renames the firing pane by id:
 | `UserPromptSubmit` | working |
 | `Stop` | idle |
 
-`ccs-state` labels the row with a registered slot name when the `session_id`
-maps to one via `~/.config/claude-slots`, and otherwise with the pane's
-directory (F15). It no-ops only when there is no Zellij pane id in the
-environment, so the hooks are safe to leave installed globally.
+`ccs-state` labels the row with, in order: a registered slot name via
+`~/.config/claude-slots`; Claude's own session name (F16); and the pane's
+directory as a last resort (F15). It no-ops only when there is no Zellij
+pane id in the environment, so the hooks are safe to leave installed
+globally.
 
 **Verified timeline**, from a real session where a prompt was sent at t=45s
 and the agent backgrounded a long-running command, went idle, then resumed
@@ -135,9 +136,9 @@ when the command completed:
 | 81s | 🟢 |
 | 84s | ⚪ |
 
-**Tradeoff:** the pane title is now permanently `<state> <slot>`; Claude's
-own live task-summary title is never shown again for a `ccs`-managed pane.
-`zellij action undo-rename-pane -p <id>` restores the OSC title for one
+**Tradeoff:** the pane title is now permanently `<state> <label>`; Claude's
+own live task-summary title is never shown again for any hooked pane, `ccs`
+or not. `zellij action undo-rename-pane -p <id>` restores the OSC title for one
 pane; removing the three hooks restores it everywhere.
 
 ### F13. `Notification` was tried and rejected
