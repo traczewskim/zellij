@@ -2,3 +2,8 @@
 # to conversation uuids. Keep it local; commit claude-slots.example instead.
 claude-slots
 plugins/*.wasm
+
+# Machine-local session bookkeeping written by the release/audit hooks.
+# Rewrites head_sha and timestamp on every run, so it only ever dirties
+# the working tree; nothing here describes the workspace itself.
+.claude/session-state/
