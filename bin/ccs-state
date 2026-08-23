@@ -29,22 +29,14 @@ slot=$(awk -v u="$sid" '$2 == u { print $1; exit }' "$HOME/.config/claude-slots"
 # Zellij tab names cannot be used: the sidebar plugin's only placeholders are
 # {count} {index} {indicators} {name}, and {name} is the PANE, so `Ctrl+t R`
 # never reaches this row. /rename is the one control surface users have.
+# grep+sed rather than a JSON parse: this runs on every tool call (F17), and
+# python3 startup alone is ~40ms against ~15ms for this. Newest file wins, so
+# a resumed session beats a stale one left by a dead pid. "nameSince" cannot
+# false-match, since the pattern requires the closing quote and colon.
 if [ -z "$slot" ]; then
-    slot=$(python3 - "$sid" <<'PY' 2>/dev/null || true
-import glob, json, os, sys
-best = ("", 0)
-for f in glob.glob(os.path.expanduser("~/.claude/sessions/*.json")):
-    try:
-        d = json.load(open(f))
-    except Exception:
-        continue
-    if d.get("sessionId") == sys.argv[1] and d.get("name"):
-        m = os.path.getmtime(f)
-        if m > best[1]:
-            best = (d["name"], m)
-print(best[0])
-PY
-)
+    f=$(grep -lF "\"sessionId\":\"$sid\"" "$HOME"/.claude/sessions/*.json 2>/dev/null \
+        | xargs -r ls -t 2>/dev/null | head -1)
+    [ -n "$f" ] && slot=$(sed -n 's/.*"name":"\([^"]*\)".*/\1/p' "$f" 2>/dev/null | head -1)
 fi
 
 # Last resort: the pane's directory. Drifts as the cwd moves, so it is only
@@ -62,5 +54,14 @@ case "$state" in
     *)       name="⚪ $slot" ;;
 esac
 
+# `zellij action` costs ~117ms — it spawns a client that round-trips to the
+# server, and it dominates this script. Since PostToolUse fires after every
+# tool call, skip the call entirely when the row would not change (F17).
+cache="${XDG_CACHE_HOME:-$HOME/.cache}/x1-ccs-state"
+mkdir -p "$cache" 2>/dev/null || true
+last="$cache/$ZELLIJ_PANE_ID"
+[ "$(cat "$last" 2>/dev/null || true)" = "$name" ] && exit 0
+
 zellij action rename-pane -p "$ZELLIJ_PANE_ID" "$name" >/dev/null 2>&1 || true
+printf '%s' "$name" > "$last" 2>/dev/null || true
 exit 0

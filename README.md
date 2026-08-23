@@ -51,7 +51,7 @@ changing it. It:
 - installs `zellij/permissions.kdl` to `~/.cache/zellij/permissions.kdl`
 - appends `zellij/config.kdl.fragment` to `~/.config/zellij/config.kdl` (serialization settings)
 - appends the `zj` alias to `~/.bashrc`
-- merges `claude/settings.hooks.json` into `~/.claude/settings.json` (three hooks — see Running indicator)
+- merges `claude/settings.hooks.json` into `~/.claude/settings.json` (four hooks — see Running indicator)
 
 Open a new shell (to pick up the `zj` alias) and run `zj`.
 
@@ -66,7 +66,7 @@ Open a new shell (to pick up the `zj` alias) and run `zj`.
 | `plugins/fetch-plugins.sh` | — | Downloads the two prebuilt plugin `.wasm` files |
 | `zellij/config.kdl.fragment` | appended to `~/.config/zellij/config.kdl` | Serialization settings |
 | `zellij/permissions.kdl` | `~/.cache/zellij/permissions.kdl` | Pre-granted plugin permissions |
-| `claude/settings.hooks.json` | merged into `~/.claude/settings.json` | The three `ccs-state` hooks |
+| `claude/settings.hooks.json` | merged into `~/.claude/settings.json` | The four `ccs-state` hooks |
 | `claude-slots.example` | — (not installed) | Template for `~/.config/claude-slots`, which is gitignored |
 | `shell/bashrc.fragment` | appended to `~/.bashrc` | The `zj` alias |
 
@@ -146,6 +146,7 @@ which one is busy.
 |---|---|
 | `SessionStart` | idle |
 | `UserPromptSubmit` | working |
+| `PostToolUse` | working |
 | `Stop` | idle |
 
 It renames the pane with `zellij action rename-pane -p "$ZELLIJ_PANE_ID"` —
@@ -249,7 +250,7 @@ Restore the `.bak-<date>` files for `~/.config/zellij/config.kdl`,
 `~/.bashrc`, and `~/.claude/settings.json`.
 
 To drop only the running indicator and get Claude's own titles back: remove
-the three hooks from `~/.claude/settings.json`, then
+the four hooks from `~/.claude/settings.json`, then
 `zellij action undo-rename-pane -p <id>` per pane (or just restart the
 session).
 

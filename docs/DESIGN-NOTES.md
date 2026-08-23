@@ -116,6 +116,7 @@ to `ccs-state`, which renames the firing pane by id:
 |---|---|
 | `SessionStart` | idle |
 | `UserPromptSubmit` | working |
+| `PostToolUse` | working |
 | `Stop` | idle |
 
 `ccs-state` labels the row with, in order: a registered slot name via
@@ -139,7 +140,7 @@ when the command completed:
 **Tradeoff:** the pane title is now permanently `<state> <label>`; Claude's
 own live task-summary title is never shown again for any hooked pane, `ccs`
 or not. `zellij action undo-rename-pane -p <id>` restores the OSC title for one
-pane; removing the three hooks restores it everywhere.
+pane; removing the four hooks restores it everywhere.
 
 ### F13. `Notification` was tried and rejected
 
@@ -222,6 +223,41 @@ so this is accepted rather than fixed.
 Claude Code generates `code`, `code-76`, `code-ea` and so on. So the
 cwd-basename branch in `ccs-state` is nearly dead code — a name is almost
 always already present. It is kept only as a safety net.
+
+### F17. A mid-turn rename needs `PostToolUse`, which needs a fast script
+
+Claude renames a session *during* a turn as the topic becomes clear. With
+only `SessionStart`/`UserPromptSubmit`/`Stop` hooked, the row froze for the
+whole turn: observed on an 11-minute turn where the session was already
+named `tokens-monitor` while the pane still read `code-ea`. That is a gap,
+not a delay — no hook fires between the first prompt and the last token.
+
+`PostToolUse` closes it, but it fires after *every* tool call, and the
+script cost 176ms per fire. Measured breakdown:
+
+| Step | Cost |
+|---|---|
+| `zellij action rename-pane` | 117ms |
+| `python3` startup | ~43ms |
+| `grep -l` over `~/.claude/sessions` | 15ms |
+
+`zellij action` dominates because it spawns a client that round-trips to the
+Zellij server. Two changes made the hook affordable:
+
+- **Skip the rename when the row would not change.** The last-written name
+  is cached per pane under `~/.cache/x1-ccs-state/<pane_id>`; an unchanged
+  fire never calls Zellij at all.
+- **Drop `python3` for `grep`+`sed`.** Interpreter startup alone cost more
+  than the whole lookup now does.
+
+| Case | Before | After |
+|---|---|---|
+| Unchanged (the common case) | 176ms | **17ms** |
+| Name or state actually changed | 176ms | 138ms |
+
+**Still not fixed:** a pane sitting fully idle fires no hooks, so a rename
+there is invisible until the next message. Only polling could close that,
+which is not worth a background timer.
 
 ### Deferred: the plugin's activity rows
 
